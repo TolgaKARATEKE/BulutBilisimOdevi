@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>r/place — Mini Collaborative Canvas</title>
+  <meta name="description" content="Mini R/Place: Gerçek zamanlı işbirlikçi piksel sanat uygulaması. Kubernetes üzerinde çalışan full-stack proje." />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css?v=6" />
+</head>
+<body>
+  <!-- Header -->
+  <header id="header">
+    <div class="header-left">
+      <span class="logo">r/place</span>
+      <span class="version-badge" id="version-badge">v1.0.0</span>
+    </div>
+    <div class="header-center">
+      <div class="stat-chip" id="stat-online">
+        <span class="stat-dot online"></span>
+        <span id="online-count">0</span> online
+      </div>
+      <div class="stat-chip">
+        <span>🎨</span>
+        <span id="pixels-count">0</span> piksel
+      </div>
+      <div class="stat-chip" id="coord-chip">
+        <span>📍</span>
+        <span id="coord-display">—</span>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="connection-status" id="conn-status">
+        <span class="stat-dot" id="conn-dot"></span>
+        <span id="conn-label">Bağlanıyor...</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main canvas area -->
+  <main id="main">
+    <div id="canvas-container">
+      <canvas id="canvas"></canvas>
+      <div id="hover-outline"></div>
+    </div>
+    <div id="crosshair-h"></div>
+    <div id="crosshair-v"></div>
+
+    <!-- Zoom controls -->
+    <div id="zoom-controls">
+      <button id="btn-zoom-in" title="Yaklaştır">+</button>
+      <span id="zoom-level">1×</span>
+      <button id="btn-zoom-out" title="Uzaklaştır">−</button>
+      <button id="btn-reset-view" title="Görünümü sıfırla">⌖</button>
+    </div>
+
+    <!-- Mini map -->
+    <div id="minimap-container">
+      <canvas id="minimap"></canvas>
+      <div id="minimap-viewport"></div>
+    </div>
+  </main>
+
+  <!-- Bottom toolbar -->
+  <footer id="toolbar">
+    <!-- Color palette -->
+    <div id="palette-section">
+      <div id="palette"></div>
+    </div>
+
+    <!-- Selected color + cooldown -->
+    <div id="action-section">
+      <div id="selected-color-wrap">
+        <div id="selected-color-preview"></div>
+        <span id="selected-color-hex">#FFFFFF</span>
+      </div>
+      <div id="cooldown-wrap">
+        <div id="cooldown-bar-bg">
+          <div id="cooldown-bar"></div>
+        </div>
+        <span id="cooldown-label">Hazır!</span>
+      </div>
+      <button id="btn-place" disabled>Piksel Koy</button>
+    </div>
+  </footer>
+
+  <!-- Toast notification -->
+  <div id="toast" role="alert"></div>
+
+  <script src="app.js?v=6"></script>
+</body>
+</html>

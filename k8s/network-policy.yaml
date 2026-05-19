@@ -1,0 +1,84 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# NetworkPolicy — r-place namespace
+#
+# Trafik kuralları:
+#   1. frontend → backend-service (port 3001)
+#   2. backend  → postgres-service (port 5432)
+#   3. External → frontend (port 80)
+#   4. Tüm diğer pod-arası trafik yasak
+# ─────────────────────────────────────────────────────────────────────────────
+
+# 1. Backend sadece frontend pod'larından trafik alır
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-frontend-to-backend
+  namespace: r-place
+spec:
+  podSelector:
+    matchLabels:
+      app: backend
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: frontend
+      ports:
+        - protocol: TCP
+          port: 3001
+
+---
+# 2. PostgreSQL sadece backend pod'larından trafik alır
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-backend-to-postgres
+  namespace: r-place
+spec:
+  podSelector:
+    matchLabels:
+      app: postgres
+  policyTypes:
+    - Ingress
+  ingress:
+    - from:
+        - podSelector:
+            matchLabels:
+              app: backend
+      ports:
+        - protocol: TCP
+          port: 5432
+
+---
+# 3. Frontend pod'ları dışarıdan (LoadBalancer) trafik alır
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-external-to-frontend
+  namespace: r-place
+spec:
+  podSelector:
+    matchLabels:
+      app: frontend
+  policyTypes:
+    - Ingress
+  ingress:
+    - ports:
+        - protocol: TCP
+          port: 80
+
+---
+# 4. Tüm pod'lar dışarıya çıkabilir (DNS, Docker Hub pull vs.)
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: allow-all-egress
+  namespace: r-place
+spec:
+  podSelector: {}
+  policyTypes:
+    - Egress
+  egress:
+    - {}

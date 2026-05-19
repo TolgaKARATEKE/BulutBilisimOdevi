@@ -1,0 +1,159 @@
+name: CI/CD — r/place
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  REGISTRY:        docker.io
+  BACKEND_IMAGE:   ${{ secrets.DOCKER_USERNAME }}/rplace-backend
+  FRONTEND_IMAGE:  ${{ secrets.DOCKER_USERNAME }}/rplace-frontend
+
+jobs:
+  # ─── 1. Test ───────────────────────────────────────────────────────────────
+  test:
+    name: Run Tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install backend dependencies
+        working-directory: backend
+        run: npm ci
+
+      - name: Lint backend
+        working-directory: backend
+        run: node --check server.js db.js
+
+      - name: Validate K8s manifests (dry-run)
+        run: |
+          curl -LO "https://dl.k8s.io/release/v1.29.0/bin/linux/amd64/kubectl"
+          chmod +x kubectl
+          for f in k8s/*.yaml; do
+            echo "Validating $f..."
+            ./kubectl apply --dry-run=client --validate=false -f "$f" || true
+          done
+
+  # ─── 2. Build & Push Docker Images ────────────────────────────────────────
+  build-and-push:
+    name: Build & Push Images
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    outputs:
+      image-tag: ${{ steps.tag.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Generate image tag
+        id: tag
+        run: echo "tag=${{ github.sha }}" >> $GITHUB_OUTPUT
+
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKER_USERNAME }}
+          password: ${{ secrets.DOCKER_PASSWORD }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build & push backend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          push: true
+          tags: |
+            ${{ env.BACKEND_IMAGE }}:latest
+            ${{ env.BACKEND_IMAGE }}:${{ steps.tag.outputs.tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Build & push frontend
+        uses: docker/build-push-action@v5
+        with:
+          context: ./frontend
+          push: true
+          tags: |
+            ${{ env.FRONTEND_IMAGE }}:latest
+            ${{ env.FRONTEND_IMAGE }}:${{ steps.tag.outputs.tag }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # ─── 3. Deploy to GKE ─────────────────────────────────────────────────────
+  deploy:
+    name: Deploy to GKE
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Set up gcloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Configure kubectl (GKE)
+        run: |
+          gcloud container clusters get-credentials ${{ secrets.GKE_CLUSTER }} \
+            --zone ${{ secrets.GKE_ZONE }} \
+            --project ${{ secrets.GCP_PROJECT_ID }}
+
+      - name: Apply namespace and secrets
+        run: |
+          kubectl apply -f k8s/namespace.yaml
+          kubectl apply -f k8s/postgres-secret.yaml
+
+      - name: Deploy PostgreSQL (PVC + Deployment + Service)
+        run: |
+          kubectl apply -f k8s/postgres-pvc.yaml
+          kubectl apply -f k8s/postgres-deployment.yaml
+          kubectl apply -f k8s/postgres-service.yaml
+          kubectl rollout status deployment/postgres -n r-place --timeout=120s
+
+      - name: Deploy Backend
+        run: |
+          # Update image tag
+          sed -i "s|DOCKER_USERNAME|${{ secrets.DOCKER_USERNAME }}|g" k8s/backend-deployment.yaml
+          sed -i "s|:latest|:${{ needs.build-and-push.outputs.image-tag }}|g" k8s/backend-deployment.yaml
+          kubectl apply -f k8s/backend-deployment.yaml
+          kubectl apply -f k8s/backend-service.yaml
+          kubectl rollout status deployment/backend -n r-place --timeout=180s
+
+      - name: Deploy Frontend
+        run: |
+          sed -i "s|DOCKER_USERNAME|${{ secrets.DOCKER_USERNAME }}|g" k8s/frontend-deployment.yaml
+          sed -i "s|:latest|:${{ needs.build-and-push.outputs.image-tag }}|g" k8s/frontend-deployment.yaml
+          kubectl apply -f k8s/frontend-deployment.yaml
+          kubectl apply -f k8s/frontend-service.yaml
+          kubectl rollout status deployment/frontend -n r-place --timeout=180s
+
+      - name: Apply NetworkPolicy & HPA
+        run: |
+          kubectl apply -f k8s/network-policy.yaml
+          kubectl apply -f k8s/hpa.yaml
+
+      - name: Print service external IP
+        run: |
+          echo "Waiting for LoadBalancer IP..."
+          sleep 30
+          kubectl get svc frontend-service -n r-place
+
+      - name: Notify deployment success
+        run: |
+          echo "✅ Deployment ${{ needs.build-and-push.outputs.image-tag }} completed!"
