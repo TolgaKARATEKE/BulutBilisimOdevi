@@ -95,13 +95,18 @@ jobs:
     runs-on: ubuntu-latest
     needs: build-and-push
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    # GÜVENLİK GÜNCELLEMESİ: OIDC (Keyless Auth) için gerekli izinler
+    permissions:
+      contents: 'read'
+      id-token: 'write'
     steps:
       - uses: actions/checkout@v4
 
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
-          credentials_json: ${{ secrets.GCP_SA_KEY }}
+          workload_identity_provider: 'projects/203964949007/locations/global/workloadIdentityPools/github-pool/providers/github-provider'
+          service_account: 'github-actions@project-495b8686-12c9-4425-832.iam.gserviceaccount.com'
 
       - name: Set up gcloud SDK
         uses: google-github-actions/setup-gcloud@v2
