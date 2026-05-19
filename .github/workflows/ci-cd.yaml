@@ -28,7 +28,7 @@ jobs:
 
       - name: Install backend dependencies
         working-directory: backend
-        run: npm ci
+        run: npm install
 
       - name: Lint backend
         working-directory: backend
@@ -95,7 +95,6 @@ jobs:
     runs-on: ubuntu-latest
     needs: build-and-push
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    # GÜVENLİK GÜNCELLEMESİ: OIDC (Keyless Auth) için gerekli izinler
     permissions:
       contents: 'read'
       id-token: 'write'
@@ -133,7 +132,6 @@ jobs:
 
       - name: Deploy Backend
         run: |
-          # Update image tag
           sed -i "s|DOCKER_USERNAME|${{ secrets.DOCKER_USERNAME }}|g" k8s/backend-deployment.yaml
           sed -i "s|:latest|:${{ needs.build-and-push.outputs.image-tag }}|g" k8s/backend-deployment.yaml
           kubectl apply -f k8s/backend-deployment.yaml
