@@ -3,7 +3,7 @@
 > Reddit r/place benzeri gerçek zamanlı işbirlikçi piksel canvas uygulaması.  
 > Docker, Kubernetes (GKE), CI/CD pipeline ve tüm proje gereksinimleri uygulanmıştır.
 
----
+---   c
 
 ## 📋 İçindekiler
 
